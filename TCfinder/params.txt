@@ -1,0 +1,10 @@
+powerlaw:
+    value_range = [10,1000]
+distclu:
+    maxdist = 20
+paraclu:
+    minStability = 1
+    maxLength = 500
+    removeSingletons = True
+    keepSingletonAbove = 15
+    reducetoNoneoverlap = True
