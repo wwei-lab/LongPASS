@@ -15,7 +15,7 @@ class TBS_all_collection(object):
     def __init__(self,TBS_all_list,TBS_strand_collection_list):
         self.TBS_strand_collection_list = TBS_strand_collection_list
         self.TBSlist = TBS_all_list
-        self.reads_counts = [int(TBS.reads_count) for TBS in self.TBSlist]
+        self.reads_counts = [int(tbs.reads_count) for tbs in self.TBSlist]
         self.total_count = sum(self.reads_counts)
         # self.chrs = [TBS.chr for TBS in self.TBSlist]
         # self.pos = [TBS.pos for TBS in self.TBSlist]
@@ -33,9 +33,6 @@ class TBS_all_collection(object):
             self.normalized_counts = normalization_functions.fit_values_to_referent_power_law(self.reads_counts, coefficients)
         else:
             self.normalized_counts = self.reads_counts
-
-        for i,TBS in enumerate(self.TBSlist):
-            self.TBSlist[i].normalized_count = self.normalized_counts[i]
         
         g = 0
         for i,tbs_strand_collection in enumerate(self.TBS_strand_collection_list):
@@ -56,8 +53,10 @@ class TBS_all_collection(object):
                 tes_pos_list = [int(tbs.pos) for tbs in tbs_chr_collection.tbs_chr_list if tbs.eventtype == "tes"]
                 tss_cpm_list = [float(tbs.normalized_count) for tbs in tbs_chr_collection.tbs_chr_list if tbs.eventtype == "tss"]
                 tes_cpm_list = [float(tbs.normalized_count) for tbs in tbs_chr_collection.tbs_chr_list if tbs.eventtype == "tes"]
-                all_tbs_chr_list.append([strand,chro,tss_pos_list,tss_cpm_list,cluster_list,"tss"]) # three dimensional list
-                all_tbs_chr_list.append([strand,chro,tes_pos_list,tes_cpm_list,cluster_list,"tes"])
+                if tss_cpm_list != [] and tss_pos_list != []:
+                    all_tbs_chr_list.append([strand,chro,tss_pos_list,tss_cpm_list,cluster_list,"tss"]) # three dimensional list
+                if tes_cpm_list != [] and tes_pos_list != []:
+                    all_tbs_chr_list.append([strand,chro,tes_pos_list,tes_cpm_list,cluster_list,"tes"])
 
         if method == "paraclu":
             p = multiprocessing.Pool(int(cpu))
@@ -72,58 +71,14 @@ class TBS_all_collection(object):
             p.join()
 
         self.all_cluster_list = all_cluster_list
-    
-    @staticmethod
-    def cluster_filter1(cluster_list_params):
-        cluster_list = cluster_list_params[0]
-        params = cluster_list_params[1]
-        minStability,maxLength,removeSingletons,keepSingletonAbove = params
-        cluster_filter1_list = []
-        cluster_id = 1
-        for j,cluster in enumerate(cluster_list):
-            start = cluster.start
-            end = cluster.end
-            num_sites = cluster.num_sites
-            dominant_site = cluster.dominant_site
-            total_cpm = cluster.total_cpm
-            dominant_site_cpm = cluster.dominant_site_cpm
-            min_d = cluster.min_d
-            max_d = cluster.max_d
-            chro = cluster.chro
-            strand = cluster.strand
-            eventtype = cluster.eventtype
-            if (max_d/min_d > minStability and end - start + 1 < maxLength):
-                if (removeSingletons == True):
-                    if (start == end and total_cpm > keepSingletonAbove) or (end != start):
-                        cluster.cluster_id = cluster_id
-                        cluster_filter1_list.append(cluster)
-                        cluster_id += 1
-                else:
-                    cluster.cluster_id = cluster_id
-                    cluster_filter1_list.append(cluster)
-                    cluster_id += 1
-        
-        return cluster_filter1_list
-
-    @staticmethod
-    def cluster_filter2_step3(cluster_filter2_tmp_selected_list_cluster_filter1_list):
-        cluster_filter2_tmp_selected_list,cluster_filter1_list = cluster_filter2_tmp_selected_list_cluster_filter1_list
-        cluster_filter2_list = []
-        cluster_filter2_tmp_selected_list_all_ids = [cluster[0] for cluster in cluster_filter2_tmp_selected_list]
-        for cluster in cluster_filter1_list:
-            if cluster.cluster_id in cluster_filter2_tmp_selected_list_all_ids:
-                cluster_filter2_list.append(cluster)
-
-        return cluster_filter2_list
-
 
     def cluster_filter(self,params_dict):
         cpu = params_dict.get("cpu")
         minStability = float(params_dict.get("minStability"))
         maxLength = int(params_dict.get("maxLength"))
-        removeSingletons = bool(params_dict.get("removeSingletons"))
+        removeSingletons = params_dict.get("removeSingletons")
         keepSingletonAbove = float(params_dict.get("keepSingletonAbove"))
-        reducetoNoneoverlap = bool(params_dict.get("reducetoNoneoverlap"))
+        reducetoNoneoverlap = params_dict.get("reducetoNoneoverlap")
 
         all_cluster_list = self.all_cluster_list
         params = [minStability,maxLength,removeSingletons,keepSingletonAbove]
@@ -131,28 +86,23 @@ class TBS_all_collection(object):
         '''
         filter1
         '''
-
-        all_cluster_list_params = []
-        for i,cluster_list in enumerate(all_cluster_list):
-            cluster_list_params = [cluster_list,params]
-            all_cluster_list_params.append(cluster_list_params)
-
         p = multiprocessing.Pool(cpu)
-        all_cluster_filter1_list = p.map(self.cluster_filter1,all_cluster_list_params)
+        all_cluster_filter1_list = p.map(partial(cluster_filter1,params),all_cluster_list)
         p.close()
         p.join()
 
         '''
         filter1 done
         '''
-        if not reducetoNoneoverlap:
+        if reducetoNoneoverlap != "True":
+            print("no reduce")
             self.all_cluster_list = all_cluster_filter1_list
         else:
             '''
             filter2
             step1 : Sort in ascending order of start, descending order of end
             '''
-
+            print("reduce")
             all_cluster_filter2_tmp_list = []
 
             for cluster_filter1_list in all_cluster_filter1_list:
@@ -192,11 +142,67 @@ class TBS_all_collection(object):
             '''
 
             p = multiprocessing.Pool(cpu)
-            all_cluster_filter2_list = p.map(self.cluster_filter2_step3,list(zip(all_cluster_filter2_tmp_selected_list,all_cluster_filter1_list)))
+            all_cluster_filter2_list = p.map(cluster_filter2_step3,list(zip(all_cluster_filter2_tmp_selected_list,all_cluster_filter1_list)))
             p.close()
             p.join()
 
+            '''
+            filter 2 done
+            '''
             self.all_cluster_list = all_cluster_filter2_list
+        
+        # if collapse_strand == True:
+        #     all_cluster_list = self.all_cluster_list
+        #     all_cluster_list_tmp = []
+        #     for i,cluster_list in enumerate(all_cluster_list):
+        #         prev_chro = cluster_list[0].chro
+        #         prev_eventtype = cluster_list[0].eventtype
+        #         for j,cluster_list2 in enumerate(all_cluster_list[i+1:]):
+        #             current_chro = cluster_list2[0].chro
+        #             current_eventtype = cluster_list2[0].eventtype
+        #             if prev_chro == current_chro and prev_eventtype == current_eventtype:
+        #                 cluster_list_tmp = cluster_list + cluster_list2
+        #                 all_cluster_list_tmp.append(cluster_list_tmp)
+
+
+def cluster_filter1(params,cluster_list):
+    minStability,maxLength,removeSingletons,keepSingletonAbove = params
+    cluster_filter1_list = []
+    cluster_id = 1
+    for cluster in cluster_list:
+        start = cluster.start
+        end = cluster.end
+        num_sites = cluster.num_sites
+        dominant_site = cluster.dominant_site
+        total_cpm = cluster.total_cpm
+        dominant_site_cpm = cluster.dominant_site_cpm
+        min_d = cluster.min_d
+        max_d = cluster.max_d
+        chro = cluster.chro
+        strand = cluster.strand
+        eventtype = cluster.eventtype
+        if (max_d/min_d > minStability and end - start + 1 < maxLength):
+            if (removeSingletons == "True"):
+                if (start == end and total_cpm > keepSingletonAbove) or (end != start):
+                    cluster.cluster_id = cluster_id
+                    cluster_filter1_list.append(cluster)
+                    cluster_id += 1
+            else:
+                cluster.cluster_id = cluster_id
+                cluster_filter1_list.append(cluster)
+                cluster_id += 1
+    
+    return cluster_filter1_list
+
+def cluster_filter2_step3(cluster_filter2_tmp_selected_list_cluster_filter1_list):
+    cluster_filter2_tmp_selected_list,cluster_filter1_list = cluster_filter2_tmp_selected_list_cluster_filter1_list
+    cluster_filter2_list = []
+    cluster_filter2_tmp_selected_list_all_ids = [cluster[0] for cluster in cluster_filter2_tmp_selected_list]
+    for cluster in cluster_filter1_list:
+        if cluster.cluster_id in cluster_filter2_tmp_selected_list_all_ids:
+            cluster_filter2_list.append(cluster)
+
+    return cluster_filter2_list
 
 class TBS_strand_collection(object):
     '''

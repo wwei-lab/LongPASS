@@ -25,6 +25,149 @@ __doc__ = '''
 
 logger = logging.getLogger('TCfinder.misc')
 
+def get_genestrand(ts_tag,read_strand):
+    if ts_tag == "43":
+        genestrand = read_strand
+    elif ts_tag == "45":
+        if read_strand == "+":
+            genestrand = "-"
+        elif read_strand == "-":
+            genestrand = "+"
+
+    return genestrand
+
+def bedtotbs(bedfile,writefile,writefile2):
+    f2 = open(writefile,"w")
+    f3 = open(writefile2,"w") # this is for pos bed file.
+    chr_pos_strand_dict = {}
+    with open(bedfile,"r") as f:
+        for line in f:
+            # sites convert to 1-base.
+            # tbs file is 1-base
+            chrname = line.split('\t')[0].strip()
+            startsite = int(line.split('\t')[1].strip()) + 1
+            endsite = int(line.split('\t')[2].strip())
+            readid = line.split('\t')[3].strip()
+            ts_tag = line.split('\t')[4].strip()
+            read_strand = line.split('\t')[5].strip()
+
+            genestrand = get_genestrand(ts_tag,read_strand)
+
+            if genestrand == "+":
+                chr_pos_strand1 = "%s\t%s\t%s" %(chrname,startsite,genestrand)
+                chr_pos_strand2 = "%s\t%s\t%s" %(chrname,endsite,genestrand)
+                
+                if chr_pos_strand1 not in chr_pos_strand_dict:
+                    chr_pos_strand_dict[chr_pos_strand1] = [1,0]
+                else:
+                    chr_pos_strand_dict[chr_pos_strand1][0] += 1
+                if chr_pos_strand2 not in chr_pos_strand_dict:
+                    chr_pos_strand_dict[chr_pos_strand2] = [0,1]
+                else:
+                    chr_pos_strand_dict[chr_pos_strand2][1] += 1
+            else:
+                chr_pos_strand1 = "%s\t%s\t%s" %(chrname,endsite,genestrand)
+                chr_pos_strand2 = "%s\t%s\t%s" %(chrname,startsite,genestrand)
+
+                if chr_pos_strand1 not in chr_pos_strand_dict:
+                    chr_pos_strand_dict[chr_pos_strand1] = [1,0]
+                else:
+                    chr_pos_strand_dict[chr_pos_strand1][0] += 1
+         
+                if chr_pos_strand2 not in chr_pos_strand_dict:
+                    chr_pos_strand_dict[chr_pos_strand2] = [0,1]
+                else:
+                    chr_pos_strand_dict[chr_pos_strand2][1] += 1
+
+            f3.write("%s\t%s\t%s\t%s\t%s\t%s\n"%(chrname,startsite - 1,startsite,readid,"0",genestrand))
+            f3.write("%s\t%s\t%s\t%s\t%s\t%s\n"%(chrname,endsite,endsite + 1,readid,"0",genestrand))
+
+    for chr_pos_strand,counts in chr_pos_strand_dict.items():
+        writeline = "%s\t%s\n" %(chr_pos_strand,'\t'.join([str(count) for count in counts]))
+        f2.write(writeline)
+
+    f2.close()
+    f3.close()
+
+def read_gtf_transcript(gtf_path):
+  all_transcript_list = []
+  with open(gtf_path,"r") as gtf_file:
+    for line in gtf_file:
+      if line.split('\t')[2] == "transcript":
+        gene_id = line.split('\t')[8].split(';')[0]
+        chro = line.split('\t')[0]
+        strand = line.split('\t')[6]
+        start = int(line.split('\t')[3])
+        end = int(line.split('\t')[4])
+        width = end - start + 1
+        all_transcript_list.append((chro,strand,start,end,width,gene_id))
+  return all_transcript_list
+
+
+def read_range_withoutstrand_file(range_file):
+  all_ranges = []
+  with open(range_file,'r') as rangefile:
+    for line in rangefile:
+      chro = line.split('\t')[0]
+      start = int(line.split('\t')[1])
+      end = int(line.split('\t')[2])
+      width = end - start + 1
+      all_ranges.append((chro,start,end,width))
+
+  return all_ranges
+
+def read_range_withstrand_file(range_file):
+  all_ranges = []
+  with open(range_file,'r') as rangefile:
+    for line in rangefile:
+      chro = line.split('\t')[0]
+      start = int(line.split('\t')[1])
+      end = int(line.split('\t')[2])
+      strand = line.split(('\t')[3])
+
+      all_ranges.append((chro,strand,start,end))
+
+def filter_by_cover_radio(args,radio_threshold,all_ranges,all_gtf_transcript):
+  #need a buffer length?
+  #filter the ranges and correct the strand to the gtf file.
+  all_ranges_filterBylength = []
+  for range_ in all_ranges:
+    range_chro,range_start,range_end,range_width = range_
+    for gtf_transcript in all_gtf_transcript:
+      gtf_chro,gtf_strand,gtf_start,gtf_end,gtf_width,gene_id = gtf_transcript
+      buffer_length = 100
+      if range_chro == gtf_chro and range_start >= gtf_start - buffer_length and range_end <= gtf_end + buffer_length and range_width / gtf_width >= radio_threshold:
+        all_ranges_filterBylength.append((range_chro,gtf_strand,range_start,range_end))
+
+  return all_ranges_filterBylength
+
+def range_to_peak(all_ranges_filterBylength):
+  #dict to store position count
+  chro_strand_pos_dict = {}
+  for range_ in all_ranges_filterBylength:
+    chro,strand,start,end = range_
+    chro_strand_start = chro + "_" + strand + "_" + str(start)
+    chro_strand_end = chro + "_" + strand + "_" + str(end)
+    if chro_strand_start in chro_strand_pos_dict:
+      chro_strand_pos_dict[chro_strand_start][0] += 1
+    else:
+      chro_strand_pos_dict[chro_strand_start] = [1,0]
+    if chro_strand_end in chro_strand_pos_dict:
+      chro_strand_pos_dict[chro_strand_end][1] += 1
+    else:
+      chro_strand_pos_dict[chro_strand_end] = [0,1]
+
+  # for pos,counts_list in chro_strand_pos_dict.items():
+  #   if counts_list[0] < peak_threshold:
+  #       chro_strand_pos_dict[pos][0] = 0
+  #   if counts_list[1] < peak_threshold:
+  #       chro_strand_pos_dict[pos][1] = 0
+
+  # chro_strand_pos_dict = {i:chro_strand_pos_dict[i] for i in chro_strand_pos_dict if chro_strand_pos_dict[i] != [0,0]}
+
+  return chro_strand_pos_dict
+
+
 def get_args():
     parser = argparse.ArgumentParser(description="",
     )
@@ -42,28 +185,57 @@ def get_args():
                           metavar="file",
     )
 
+    parser.add_argument("--length_radio_threshold",
+                          help="length radio for screen.",
+                          default="0.85"
+    )
+
+    parser.add_argument("--peak_threshold",
+                        help = "peak threshold.",
+                        default = "5",
+    )
+
     parser.add_argument("--clustering",
                           help="method used for clustering,default is paraclu",
                           default="paraclu",
     )
     
+    parser.add_argument("--rangefile",
+                        help="Data is range file.",
+                        nargs="+",
+                        metavar="file",
+                        default=[]
+    )    
     parser.add_argument("--tssfile",
                          help="Data is transcription start site file.",
                          nargs='+',
                          metavar="file",
-                         default="")
+                         default=[])
 
     parser.add_argument("--tesfile",
                          help="Data is transcription end site file.",
                          nargs='+',
                          metavar="file",
-                         default="")
+                         default=[])
 
     parser.add_argument("--tbsfile",
                          help="Data is transcription start and end site file.",
                          nargs='+',
                          metavar="file",
-                         default="")
+                         default=[])
+
+    parser.add_argument("--bamfile",
+                      help="mapping result of minimap",
+                      nargs='+',
+                      metavar="file",
+                      default=[])
+
+    parser.add_argument("--gtf",
+                          help="annotation file",
+                          nargs='+',
+                          metavar="file",
+                          default= []
+    )
 
     parser.add_argument("--cpu",
                         help = "the number of cpu that will be used to process the data.",
@@ -176,7 +348,7 @@ def load_lrtsp_objects(filepath,boundary_type = "tbs"):
             logger.warn("start site and end site counts are zero at position %s" %pos)
           
           lrtsp_object = [lrtsp_object for lrtsp_object in [lrtsp_object_tss,lrtsp_object_tes] if lrtsp_object is not None]
-          TBS_all_list.extend(lrtsp_object)
+
 
           if strand == '+':
             if chrname not in lrtsp_objects_positive_strand:
@@ -211,6 +383,9 @@ def load_lrtsp_objects(filepath,boundary_type = "tbs"):
       TBS_chr_collection_list = []
       for chro,TBS_chr_list in lrtsp_objects_strand.items():
         TBS_chr_collection_list.append(TBS_chr_collection(chro, TBS_chr_list))
+        TBS_all_list.extend(TBS_chr_list)
       TBS_strand_collection_list.append(TBS_strand_collection(strand,TBS_chr_collection_list))
     
     return TBS_all_collection(TBS_all_list,TBS_strand_collection_list)
+
+  

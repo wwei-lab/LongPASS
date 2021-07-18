@@ -104,30 +104,9 @@ def paraclu(strand_chro_pos_cpm_para_cluster_list_eventtype,minimal_density = -m
             paraclu((strand,chro,pos[:break_site],cpm[:break_site],para_cluster_list,event_type),next_min)
             paraclu((strand,chro,pos[break_site:],cpm[break_site:],para_cluster_list,event_type),next_min)
 
-        para_cluster_list.append(para_cluster(start_site,end_site,num_sites,dominant_site,total_cpm,max_cpm,minimal_density,maximal_density,chro,strand,event_type))
+        para_cluster_list.append(para_cluster(start_site,end_site,num_sites,dominant_site,total_cpm,max_cpm,minimal_density,maximal_density,chro,strand,event_type,pos))
         # the assignment of the chromesome and strand information is placed in the entry of the pipeline.
  
-        # print(break_site,"#####",len(para_cluster_list),para_cluster_list[-1].chro,para_cluster_list[-1].strand,para_cluster_list[-1].start,para_cluster_list[-1].end)
         return para_cluster_list
     else:
         return
-
-def paraclu_filter():
-    pass
-
-
-# if __name__ == "__main__":
-#     pos = [1001,312,216,501,203]
-#     cpm = [0.1,0.32,0.452,1.67,2.35]
-#     paraclu(pos,cpm)
-#     for i in [vars(i) for i in para_cluster_list]:
-#         print (i)
-
-
-
-
-
-
-
-
-

@@ -5,7 +5,7 @@ This module is the main entry of TCfinder.It is executed when user runs `run_TCf
 (directly from the source directory).
 """
 
-from misc import load_lrtsp_objects
+from misc import load_lrtsp_objects,bedtotbs,get_genestrand
 import logging
 import misc
 import sys
@@ -17,135 +17,244 @@ from time import *
 from functools import partial
 import tempfile
 import subprocess
+import pysam
+import pybedtools
+import csv
 
-# def combine_replicate_file(all_combine_file_path,boundary_type):
-#     prev = []
-#     prev_start = 0
-#     prev_end = 0
-#     prev_site = 0
-#     unique_all_combine_file_path = "unique_" + all_combine_file_path
-#     f = open(unique_all_combine_file_path,'w')
-#     with open(all_combine_file_path,'r') as all_combine_file:
-#         for line in all_combine_file:
-#             try:
-#                 chro_pos_strand = line.split('\t')[:3]
-#             except Exception as e:
-#                 print("check your input!")
-#             if boundary_type == "tbs":
-#                 try:
-#                     start = line.split('\t')[3]
-#                     end = line.split('\t')[4].strip()
-#                 except Exception as e:
-#                     print("check your input!")
-#             else:
-#                 try:
-#                     site = line.split('\t')[3].strip()
-#                 except Exception as e:
-#                     print("check your input!")
-#             if chro_pos_strand == prev:
-#                 if boundary_type == "tbs":
-#                     prev_start = prev_start + start
-#                     prev_end = prev_end + end
-#                 else:
-#                     prev_site = prev_site + site
-#             else:
-#                 if prev == []: #initial type
-#                     prev = chro_pos_strand
-#                     if boundary_type == "tbs":
-#                         prev_start = start
-#                         prev_end = end
-#                     else:
-#                         prev_site = site
-#                     continue
-#                 if boundary_type == "tbs":
-#                     newline = "%s\t%s\t%s\t%s\t%s\n" % (prev[0],prev[1],prev[2],prev_start,prev_end)
-#                     f.write(newline)
-#                     prev = chro_pos_strand
-#                     if boundary_type == "tbs":
-#                         prev_start = start
-#                         prev_end = end
-#                     else:
-#                         prev_site = site
-        
-#         newline = "%s\t%s\t%s\t%s\t%s\n" % (prev[0],prev[1],prev[2],prev_start,prev_end)
-#         f.write(newline)
+def loadbamfile(bamfilepath):
+    #bam file filter:keep lines that have ts tags.
+    readbamfile = pysam.AlignmentFile(bamfilepath,"rb")
+    writebamfilepath = "./tagfilter_" + os.path.basename(bamfilepath)
+    writebamfilepath2 = "./flagfilter_tagfilter_" + os.path.basename(bamfilepath)
+    writebamfile = pysam.AlignmentFile(writebamfilepath,"wb",template  = readbamfile)
+    writebamfile2 = pysam.AlignmentFile(writebamfilepath2,"wb",template  = readbamfile)
+    for read in readbamfile:
+        if read.has_tag("ts"):
+            writebamfile.write(read)
+            if int(read.flag) < 2048:
+                writebamfile2.write(read)
+
+    readbamfile.close()
+    writebamfile.close()
+    writebamfile2.close()
+
+    #bam to bed and extract ts tag information
+    if writebamfilepath2.endswith(".bam"):
+        writebedfilepath = writebamfilepath2.replace(".bam",".bed")
+    else:
+        writebedfilepath = writebamfilepath2 + ".bed"
+    bedfile = pybedtools.BedTool(writebamfilepath2).bamtobed(tag = "ts").saveas(writebedfilepath)
+
+    #bed file to lrtsp file
+    writelrtsppath = writebedfilepath.replace(".bed", ".lrtsp")
+    writebedfilepath2 = "genestrand_" + os.path.basename(writebedfilepath)  # path for writing bed file that convert to genestrand
+    bedtotbs(writebedfilepath, writelrtsppath, writebedfilepath2)
+
+    return [writebedfilepath,writelrtsppath,writebedfilepath2]
+
+def noreplicate_peak_filter(filepath,peak_threshold,logger,filetype):
+    # script_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + "/misc/combine_tbsfile.sh"
+    # filter_command = "cat " + filepath + "|sort -k1,1 -k2n,2 > " + filepathtmp
+
+    # try:
+    #     filter_status = subprocess.check_call(filter_command,shell=True)
+    # except:
+    #     pass
+    filepathtmp = filepath + ".tmp"
+    finalfilepath = "final_" + os.path.basename(filepath)
+
+    combine_files([filepath], filepathtmp, logger, columns_num=2)
+
+    # if filetype == "tss" or filetype == "tes":
+    #     filter_command2 = "bash " + script_path + " " + filepathtmp + " " + str(peak_threshold) + " |awk  '{print $1,$2,$3,$4}'|sed 's/ /\t/g'|sort -k1,1 -k2n,2 > " + finalfilepath
+    # else:
+    #     filter_command2 = "bash " + script_path + " " + filepathtmp + " " + str(peak_threshold) + " |sort -k1,1 -k2n,2 > " + finalfilepath
+    # try:
+    #     filter_status2 = subprocess.check_call(filter_command2,shell = True)
+    # except:
+    #     pass
+
+    peak_filter(filepathtmp, filetype, finalfilepath, peak_threshold)
+    os.remove(filepathtmp)
+
+    return finalfilepath
+
+def peak_filter(all_combine_tbsfiles,tbs_type,write_file,peak_threshold):
+    peak_threshold = int(peak_threshold)
+    with open(all_combine_tbsfiles) as f:
+        tss_dict = {}
+        tes_dict = {}
+        for line in f:
+            line = line.strip()
+            chro = line.split('\t')[0]
+            pos = line.split('\t')[1]
+            strand = line.split('\t')[2]
+            chro_pos_strand = chro + "\t" + pos + "\t" + strand
+            if tbs_type == "tss":
+                tss = int(line.split('\t')[3])
+                if chro_pos_strand not in tss_dict:
+                    tss_dict[chro_pos_strand] = tss
+                else:
+                    tss_dict[chro_pos_strand] += tss
+            elif tbs_type == "tes":
+                tes = int(line.split('\t')[3])
+                if chro_pos_strand not in tes_dict:
+                    tes_dict[chro_pos_strand] = tes
+                else:
+                    tes_dict[chro_pos_strand] += tes
+            elif tbs_type == "tbs":
+                tss = int(line.split('\t')[3])
+                tes = int(line.split('\t')[4])
+                if chro_pos_strand not in tss_dict:
+                    tss_dict[chro_pos_strand] = tss
+                else:
+                    tss_dict[chro_pos_strand] += tss
+
+                if chro_pos_strand not in tes_dict:
+                    tes_dict[chro_pos_strand] = tes
+                else:
+                    tes_dict[chro_pos_strand] += tes
+
+        if tbs_type == "tss":
+            for chro_pos_strand,count in tss_dict.items():
+                if count < peak_threshold:
+                    tss_dict[chro_pos_strand] = 0
+            
+            with open(write_file , "w") as f:
+                for chro_pos_strand,count in tss_dict.items():
+                    if count != 0:
+                        f.write("%s\t%s\n"%(chro_pos_strand,count))
+
+        if tbs_type == "tes":
+            for chro_pos_strand,count in tes_dict.items():
+                if count < peak_threshold:
+                    tes_dict[chro_pos_strand] = 0
+
+            with open(write_file , "w") as f:
+                for chro_pos_strand,count in tes_dict.items():
+                    if count != 0:
+                        f.write("%s\t%s\n"%(chro_pos_strand,count))
+
+        if tbs_type == "tbs":
+            for chro_pos_strand,count in tss_dict.items():
+                if count < peak_threshold:
+                    tss_dict[chro_pos_strand] = 0
+
+            for chro_pos_strand,count in tes_dict.items():
+                if count < peak_threshold:
+                    tes_dict[chro_pos_strand] = 0
+
+            with open(write_file , "w") as f:
+                for chro_pos_strand in tss_dict:
+                    tss = tss_dict[chro_pos_strand]
+                    tes = tes_dict[chro_pos_strand]
+                    if (tss != 0 or tes != 0):
+                        f.write("%s\t%s\t%s\n"%(chro_pos_strand,tss,tes))
 
 
-
-
-
-def load_tbs_objects(logger,args):    
+def load_tbs_objects(peak_threshold,logger,args):
     logger.info("loading files...\n")
-
 
     tssfiles = args.tssfile
     tesfiles = args.tesfile
     tbsfiles = args.tbsfile
+    rangefiles = args.rangefile
+    bamfiles = args.bamfile
 
     tss_collections_dict = {}
     tes_collections_dict = {}
     tbs_collections_dict = {}
 
+    #input file type:rangefile
+    # range file needs annotation file to find the transcript strand.
+    '''
+    rangefile:
+    chrIS   38705   96443
+    chrIS   44260   96459
+    '''
+    if len(rangefiles) > 0:
+        all_transcript_list = []
+        if (not args.gtf) or len(args.gtf) > 1:
+            logger.error("no gtf file or more than one gtf file provided!") # range file must provide gtf file.
+            raise Exception()
+        else:
+            all_transcript_list = misc.read_gtf_transcript(args.gtf[0])
+
+        for rangefile in rangefiles:
+            rangefile_basename = os.path.basename(rangefile)
+            write_tbs_filename = os.path.splitext(rangefile_basename)[0] + ".lrtsp"
+            logger.info("\t>>>reading %s\n" % os.path.basename(rangefile))
+            if args.gtf:
+                all_ranges = misc.read_range_withoutstrand_file(rangefile)
+                all_ranges_filterBylength = misc.filter_by_cover_radio(args,float(args.length_radio_threshold),all_ranges,all_transcript_list)
+                all_ranges_ToPeak = misc.range_to_peak(all_ranges_filterBylength)
+            else:
+                all_ranges = misc.read_range_withstrand_file(rangefile)
+                all_ranges_ToPeak = misc.range_to_peak(all_ranges)
+            with open(write_tbs_filename,'w') as f:
+                for chro_strand_pos,counts in all_ranges_ToPeak.items():
+                    chro = chro_strand_pos.split('_')[0]
+                    strand = chro_strand_pos.split('_')[1]
+                    pos = chro_strand_pos.split('_')[2]
+                    if strand == "+":
+                        write_line = "%s\t%s\t%s\t%s\t%s\n" % (chro,pos,strand,counts[0],counts[1])
+                    elif strand == "-":
+                        write_line = "%s\t%s\t%s\t%s\t%s\n" % (chro,pos,strand,counts[1],counts[0])
+                    f.write(write_line)
+            tbsfiles.append(write_tbs_filename)
+
+    #input file type:bamfile
+    if len(bamfiles) > 0:
+        logger.info("coverting bam file to lrtsp file")
+        p = Pool(int(args.cpu))
+        bed_tbsfiles = p.map(loadbamfile,bamfiles)
+        bedfiles = [bed_tbsfile[0] for bed_tbsfile in bed_tbsfiles]
+        tbsfiles = [bed_tbsfile[1] for bed_tbsfile in bed_tbsfiles]
+        genestrandbedfiles = [bed_tbsfile[2] for bed_tbsfile in bed_tbsfiles]
+        p.close()
+        p.join()
+
+    #input file type:tssfile
     if len(tssfiles) > 0:
         if not args.replicate:
             for tssfilepath in tssfiles:
                 logger.info("\t>>>reading %s\n" % os.path.basename(tssfilepath))
-                tss_collection = misc.load_lrtsp_objects(tssfilepath, "tss")
-                tss_collections_dict[os.path.basename(tssfilepath)] = tss_collection
+                final_tssfile_path = noreplicate_peak_filter(tssfilepath,peak_threshold,logger,"tss")
+                tss_collection = misc.load_lrtsp_objects(final_tssfile_path, "tss")
+                tss_collections_dict[os.path.basename(final_tssfile_path)] = tss_collection
         else:
-            combine_command = "cat "
-            for tssfilepath in tssfiles:
-                logger.info("\t>>>reading %s\n" % os.path.basename(tssfilepath))
-                combine_command = combine_command + tssfilepath + " "
-            combine_command += "|sort -k1,1 -k2n,2 > all_combine_tssfiles.lrtsp"
+            #replicate case,peak filter
+            all_combine_tssfiles = "all_combine_tssfiles.lrtsp"
+            unique_all_combine_tssfiles = "unique_all_combine_tssfiles.lrtsp"
+            tss_collection = replicate_case_getcollection(tssfiles, all_combine_tssfiles, unique_all_combine_tssfiles, logger,"tss",peak_threshold)
+            tss_collections_dict[unique_all_combine_tssfiles] = tss_collection
             try:
-                combine_status = subprocess.check_call(combine_command,shell=True)
-            except:
-                pass
-            script_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + "/misc/combine_tbsfile.sh"
-            combine_command2 = "bash " + script_path + " all_combine_tssfiles.lrtsp |awk  '{print $1,$2,$3,$4}'|sed 's/ /\t/g'|sort -k1,1 -k2n,2 > unique_all_combine_tssfiles.lrtsp"
-            try:
-                combine2_status = subprocess.check_call(combine_command2,shell=True)
-            except:
-                pass
-            tss_collection = misc.load_lrtsp_objects("unique_all_combine_tssfiles.lrtsp", "tss")
-            tss_collections_dict["unique_all_combine_tssfiles.lrtsp"] = tss_collection
-            try:
-                subprocess.check_call("rm unique_all_combine_tssfiles.lrtsp",shell=True)
-                subprocess.check_call("rm all_combine_tssfiles.lrtsp",shell=True)
+                os.remove(all_combine_tssfiles)
+                os.remove(unique_all_combine_tssfiles)
             except:
                 pass
 
+    #input file type:tesfile
     if len(tesfiles) > 0:
         if not args.replicate:
             for tesfilepath in tesfiles:
                 logger.info("\t>>>reading %s\n" % os.path.basename(tesfilepath))
-                tes_collection = misc.load_lrtsp_objects(tesfilepath, "tes")
-                tes_collections_dict[os.path.basename(tesfilepath)] = tes_collection
+                final_tesfile_path = noreplicate_peak_filter(tesfilepath,peak_threshold,logger,"tes")
+                tes_collection = misc.load_lrtsp_objects(final_tesfile_path, "tes")
+                tes_collections_dict[os.path.basename(final_tesfile_path)] = tes_collection
         else:
-            combine_command = "cat "
-            for tesfilepath in tesfiles:
-                logger.info("\t>>>reading %s\n" % os.path.basename(tesfilepath))
-                combine_command = combine_command + tesfilepath + " "
-            combine_command += "|sort -k1,1 -k2n,2 > all_combine_tesfiles.lrtsp"
+            #replicate case,peak filter
+            all_combine_tesfiles = "all_combine_tesfiles.lrtsp"
+            unique_all_combine_tesfiles = "unique_all_combine_tesfiles.lrtsp"
+            tes_collection = replicate_case_getcollection(tesfiles, all_combine_tesfiles, unique_all_combine_tesfiles, logger,"tes",peak_threshold)
+            tes_collections_dict[unique_all_combine_tesfiles] = tes_collection
             try:
-                combine_status = subprocess.check_call(combine_command,shell=True)
-            except:
-                pass
-            script_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + "/misc/combine_tbsfile.sh"
-            combine_command2 = "bash " + script_path + " all_combine_tesfiles.lrtsp |awk  '{print $1,$2,$3,$4}'|sed 's/ /\t/g'|sort -k1,1 -k2n,2 > unique_all_combine_tesfiles.lrtsp"
-            try:
-                combine2_status = subprocess.check_call(combine_command2,shell=True)
-            except:
-                pass
-            tes_collection = misc.load_lrtsp_objects("unique_all_combine_tesfiles.lrtsp", "tes")
-            tes_collections_dict["unique_all_combine_tesfiles.lrtsp"] = tes_collection
-            try:
-                subprocess.check_call("rm unique_all_combine_tesfiles.lrtsp",shell=True)
-                subprocess.check_call("rm all_combine_tesfiles.lrtsp",shell=True)
+                os.remove(all_combine_tesfiles)
+                os.remove(unique_all_combine_tesfiles)
             except:
                 pass
 
+    #input file type:tbs file
     if len(tbsfiles) > 0:
         if not args.replicate:
             '''
@@ -156,36 +265,30 @@ def load_tbs_objects(logger,args):
             '''
             for tbsfilepath in tbsfiles:
                 logger.info("\t>>>reading %s\n" % os.path.basename(tbsfilepath))
-                tbs_collection = misc.load_lrtsp_objects(tbsfilepath, "tbs")
-                tbs_collections_dict[os.path.basename(tbsfilepath)] = tbs_collection
-
+                final_tbsfile_path = noreplicate_peak_filter(tbsfilepath,peak_threshold,logger,"tbs")
+                tbs_collection = misc.load_lrtsp_objects(final_tbsfile_path, "tbs")
+                tbs_collections_dict[os.path.basename(final_tbsfile_path)] = tbs_collection
         else:
-            combine_command = "cat "
-            for tbsfilepath in tbsfiles:
-                logger.info("\t>>>reading %s\n" % os.path.basename(tbsfilepath))
-                combine_command = combine_command + tbsfilepath + " "
-            combine_command += "|sort -k1,1 -k2n,2 > all_combine_tbsfiles.lrtsp > all_combine_tbsfiles.lrtsp"
+            all_combine_tbsfiles = "all_combine_tbsfiles.lrtsp"
+            unique_all_combine_tbsfiles = "unique_all_combine_tbsfiles.lrtsp"
+            tbs_collection = replicate_case_getcollection(tbsfiles, all_combine_tbsfiles, unique_all_combine_tbsfiles, logger,"tbs",peak_threshold)
+            tbs_collections_dict[unique_all_combine_tbsfiles] = tbs_collection
             try:
-                combine_status = subprocess.check_call(combine_command,shell=True)
-            except:
-                pass
-            script_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + "/misc/combine_tbsfile.sh"
-            combine_command2 = "bash " + script_path + " all_combine_tbsfiles.lrtsp |sort -k1,1 -k2n,2 > unique_all_combine_tbsfiles.lrtsp"
-            print (combine_command2)
-            try:
-                combine2_status = subprocess.check_call(combine_command2,shell=True)
-            except:
-                pass
-            tbs_collection = misc.load_lrtsp_objects("unique_all_combine_tbsfiles.lrtsp", "tbs")
-            tbs_collections_dict["unique_all_combine_tbsfiles.lrtsp"] = tbs_collection
-            try:
-                pass
-                # subprocess.check_call("rm all_combine_tbsfiles.lrtsp",shell=True)
-                subprocess.check_call("rm unique_all_combine_tbsfiles.lrtsp",shell=True)
+                os.remove(all_combine_tbsfiles)
+                os.remove(unique_all_combine_tbsfiles)
             except:
                 pass
 
-    return [tss_collections_dict,tes_collections_dict,tbs_collections_dict]
+    return [tss_collections_dict,tes_collections_dict,tbs_collections_dict,bedfiles,genestrandbedfiles]
+
+def replicate_case_getcollection(tbsfiles,all_combine_tbsfiles,unique_all_combine_tbsfiles,logger,tbs_type,peak_threshold):
+    combine_files(tbsfiles,all_combine_tbsfiles,logger,columns_num=2)
+    peak_filter(all_combine_tbsfiles, tbs_type, unique_all_combine_tbsfiles, peak_threshold)
+    tbs_collection = misc.load_lrtsp_objects(unique_all_combine_tbsfiles, tbs_type)
+    return tbs_collection
+
+def non_replicate_case_getcollection():
+    pass
 
 def normalization(ts_collection,method):
     ts_collection.normalization(method)
@@ -201,6 +304,7 @@ def read_params_dict(args):
             "removeSingletons" : True,
             "keepSingletonAbove" : 1.1,
             "reducetoNoneoverlap" : True,
+            "peak_threshold" : 10,
         }
     else:
         params_dict = {}
@@ -215,31 +319,84 @@ def read_params_dict(args):
 
     return params_dict
 
-def writing(args,ts_tmp_collections_list):
+def reads_assign_to_cluster(cluster_args_combinegenestrand):
+    cluster, args, combine_genestrand = cluster_args_combinegenestrand
+    pos_bed = ""
+    start = cluster.start - 1
+    end = cluster.end
+    strand = cluster.strand
+    chro = cluster.chro
+    num_sites = cluster.num_sites
+    dominant_site = cluster.dominant_site - 1
+    total_cpm = cluster.total_cpm
+    dominant_site_cpm = cluster.dominant_site_cpm
+    max_d = cluster.max_d
+    min_d = cluster.min_d
+    event_type = cluster.eventtype
+    all_pos = sorted(cluster.all_pos)
+    if len(args.bamfile) > 0:
+
+        combine_bed_file = pybedtools.BedTool(combine_genestrand)
+        for pos in all_pos:
+            pos_bed += chro + "\t" + str(pos - 1) + "\t" + str(pos) + "\t0\t0\t" + strand + "\n" # 1-base to 0-base
+        pos_bed = pos_bed.strip('\n')
+        pos_bed = pybedtools.BedTool(pos_bed,from_string= True).sort()
+
+        overlaps = combine_bed_file.intersect(pos_bed,sorted = True,s = True)
+        print("done")
+        readsids = [overlap.name for overlap in overlaps]
+
+        readsidsstr = ",".join(readsids)
+
+    line = "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (chro,strand,start,end,num_sites,dominant_site,dominant_site_cpm,round(total_cpm,5),round(max_d,5),round(min_d,5),event_type,readsidsstr)
+    
+    with open(args.o,"a") as f:
+        f.write(line)
+
+def combine_files(files_list,write_combine_file,logger,columns_num):
+    lists = []
+    for file_ in files_list:
+        logger.info("\t>>>reading %s\n" % os.path.basename(file_))
+        with open(file_,"r") as f:
+            for line in f:
+                lists.append(line.rstrip().split('\t'))
+    
+    if columns_num == 1:
+        sorted_results = sorted(lists, key=lambda x:(x[0]))
+    
+    if columns_num == 2:
+        sorted_results = sorted(lists, key=lambda x:(x[0], int(x[1])))
+
+    if columns_num == 3:
+        sorted_results = sorted(lists, key=lambda x:(x[0], int(x[1]), int(x[2])))
+
+    with open(write_combine_file,"w") as f2:
+        writer = csv.writer(f2,delimiter = '\t')
+        writer.writerows(sorted_results)
+
+def writing(args,ts_tmp_collections_list,genestrandbedfiles,logger):
     if args.clustering == "paraclu":
-        with open(args.o,'w') as file:
-            ts_collection_all_clusters_list = ts_tmp_collections_list[0].all_cluster_list
-            for ts_collection_clusters in ts_collection_all_clusters_list:
-                for cluster in ts_collection_clusters:
-                    start = cluster.start
-                    end = cluster.end
-                    strand = cluster.strand
-                    chro = cluster.chro
-                    num_sites = cluster.num_sites
-                    dominant_site = cluster.dominant_site
-                    total_cpm = cluster.total_cpm
-                    dominant_site_cpm = cluster.dominant_site_cpm
-                    max_d = cluster.max_d
-                    min_d = cluster.min_d
-                    event_type = cluster.eventtype
-                    line = "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (chro,strand,start,end,num_sites,dominant_site,dominant_site_cpm,round(total_cpm,5),round(max_d,5),round(min_d,5),event_type)
-                    file.write(line)
+        combine_genestrand = "combine_genestrand.bed"
+        combine_files(genestrandbedfiles,combine_genestrand,logger,3)
+
+        ts_collection_all_clusters_list = ts_tmp_collections_list[0].all_cluster_list
+        for ts_collection_clusters in ts_collection_all_clusters_list:
+            p = Pool(int(args.cpu))
+            all_cluster_args = []
+            for cluster in ts_collection_clusters:
+                cluster_args_combinegenestrand = [cluster,args,combine_genestrand]
+                all_cluster_args.append(cluster_args_combinegenestrand)
+
+            p.map(reads_assign_to_cluster,all_cluster_args)
+            p.close()
+            p.join()
+
     else:
         with open(args.o,'w') as file:
             ts_collection_all_clusters_list = ts_tmp_collections_list[0].all_cluster_list
             for ts_collection_clusters in ts_collection_all_clusters_list:
                 for cluster in ts_collection_clusters:
-                    start = cluster.start
+                    start = cluster.start - 1
                     end = cluster.end
                     strand = cluster.strand
                     chro = cluster.chro
@@ -268,7 +425,12 @@ def main():
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-    ts_collections_list = load_tbs_objects(logger,args)
+    #load lrtsp file
+    peak_threshold = params_dict["peak_threshold"]
+    ts_collections_list = load_tbs_objects(peak_threshold,logger,args)
+    genestrandbedfiles = ts_collections_list[-1]
+    bedfiles = ts_collections_list[-2]
+    ts_collections_list = ts_collections_list[:-2]
 
     #### normalization ####
 
@@ -331,6 +493,7 @@ def main():
         ts_collection.clustering(args.cpu,params_dict,args.clustering)
         ts_tmp_collections_list[i] = ts_collection
 
+
     logger.info("clustering done!")
     ### clustering done ###
 
@@ -347,9 +510,10 @@ def main():
 
     ### writing results ###
     logger.info("writing...\n")
-    writing(args,ts_tmp_collections_list)
+    writing(args,ts_tmp_collections_list,genestrandbedfiles,logger)
     logger.info("writing done!")
     ### writing done ###
+
 
 if __name__ == "__main__":
 	main()

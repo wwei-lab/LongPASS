@@ -4,7 +4,8 @@ distclu:
     maxdist = 20
 paraclu:
     minStability = 1
-    maxLength = 500
+    maxLength = 300
     removeSingletons = True
-    keepSingletonAbove = 15
+    keepSingletonAbove = 100
     reducetoNoneoverlap = True
+    peak_threshold = 10
