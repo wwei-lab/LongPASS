@@ -1,5 +1,5 @@
 import unittest
-import TCfinder.normalization_functions as normalization_functions
+import LongPass.normalization_functions as normalization_functions
 
 class TestNormalizationFunction(unittest.TestCase):
 

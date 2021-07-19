@@ -1,6 +1,6 @@
 import unittest
-import TCfinder.cluster_functions as cluster_functions
-from TCfinder.cluster import para_cluster
+import LongPass.cluster_functions as cluster_functions
+from LongPass.cluster import para_cluster
 
 
 class TestClusterFunction(unittest.TestCase):
