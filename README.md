@@ -5,7 +5,7 @@
 ## get started
 
 ```python
-python TCfinder/TCfinder.py -o outcluster/out_cluster.txt --clustering paraclu --normalization raw  --params TCfinder/params.txt --replicate --bamfile sequinB_rep1.trimmed.sort.bam sequinB_rep2.trimmed.sort.bam
+python longpass/LongPass.py -o outcluster/out_cluster.txt --clustering paraclu --normalization raw  --params longpass/params.txt --replicate --bamfile sequinB_rep1.trimmed.sort.bam sequinB_rep2.trimmed.sort.bam
 ```
 
 
@@ -25,6 +25,13 @@ paraclu:
     removeSingletons = True
     keepSingletonAbove = 15
     reducetoNoneoverlap = True
+```
+
+
+
+## requirement
+
+```
 ```
 
 
