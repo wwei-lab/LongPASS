@@ -42,7 +42,7 @@ python filter_reads_for_clustering.py ${in.bam} ${out.bam}
 
 (Optional: We also recommend using the Fulquant pipeline we developed previously for adapter removal, mapping, and read alignment filtering：[Fulquant](https://github.com/czhu/FulQuant) steps 1->6)
 
-(Optional: We also include a polyA/T trimming pipeline [here](.\misc\trimpolyA.py))
+(Optional: We also include a polyA/T trimming pipeline [here](misc/trimpolyA.py))
 
 **usage:**
 
