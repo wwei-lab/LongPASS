@@ -139,7 +139,7 @@ minStability: Minimum stability for a segment. default: 1
 
 The stability ratio of each cluster is defined as the ratio:
 
-![img](.\pic\stability.png)
+![img](./pic/stability.png)
 
    A high cluster stability ratio indicates that the cluster remains significant over a wide range of **d** values, implying it is a stable and robust cluster. A small stability score indicates that the break in this layer does not effectively separate the two segments.
 
