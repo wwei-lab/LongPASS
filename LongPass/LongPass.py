@@ -5,14 +5,14 @@ This module is the main entry of TCfinder.It is executed when user runs `run_TCf
 (directly from the source directory).
 """
 
-from misc import load_lrtsp_objects,bedtotbs,get_genestrand
+from misc import load_lrtsp_objects,bedtotps,get_genestrand
 import logging
 import misc
 import sys
 import os
 from multiprocessing import Pool,Queue,Process,Manager
 import multiprocessing as mp
-import TBS
+import TPS
 from time import *
 from functools import partial
 import tempfile
@@ -48,12 +48,12 @@ def loadbamfile(bamfilepath):
     #bed file to lrtsp file
     writelrtsppath = writebedfilepath.replace(".bed", ".lrtsp")
     writebedfilepath2 = "genestrand_" + os.path.basename(writebedfilepath)  # path for writing bed file that convert to genestrand
-    bedtotbs(writebedfilepath, writelrtsppath, writebedfilepath2)
+    bedtotps(writebedfilepath, writelrtsppath, writebedfilepath2)
 
     return [writebedfilepath,writelrtsppath,writebedfilepath2]
 
 def noreplicate_peak_filter(filepath,peak_threshold,logger,filetype):
-    # script_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + "/misc/combine_tbsfile.sh"
+    # script_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + "/misc/combine_tpsfile.sh"
     # filter_command = "cat " + filepath + "|sort -k1,1 -k2n,2 > " + filepathtmp
 
     # try:
@@ -79,9 +79,9 @@ def noreplicate_peak_filter(filepath,peak_threshold,logger,filetype):
 
     return finalfilepath
 
-def peak_filter(all_combine_tbsfiles,tbs_type,write_file,peak_threshold):
+def peak_filter(all_combine_tpsfiles,tps_type,write_file,peak_threshold):
     peak_threshold = int(peak_threshold)
-    with open(all_combine_tbsfiles) as f:
+    with open(all_combine_tpsfiles) as f:
         tss_dict = {}
         tes_dict = {}
         for line in f:
@@ -90,19 +90,19 @@ def peak_filter(all_combine_tbsfiles,tbs_type,write_file,peak_threshold):
             pos = line.split('\t')[1]
             strand = line.split('\t')[2]
             chro_pos_strand = chro + "\t" + pos + "\t" + strand
-            if tbs_type == "tss":
+            if tps_type == "tss":
                 tss = int(line.split('\t')[3])
                 if chro_pos_strand not in tss_dict:
                     tss_dict[chro_pos_strand] = tss
                 else:
                     tss_dict[chro_pos_strand] += tss
-            elif tbs_type == "tes":
+            elif tps_type == "tes":
                 tes = int(line.split('\t')[3])
                 if chro_pos_strand not in tes_dict:
                     tes_dict[chro_pos_strand] = tes
                 else:
                     tes_dict[chro_pos_strand] += tes
-            elif tbs_type == "tbs":
+            elif tps_type == "tps":
                 tss = int(line.split('\t')[3])
                 tes = int(line.split('\t')[4])
                 if chro_pos_strand not in tss_dict:
@@ -115,7 +115,7 @@ def peak_filter(all_combine_tbsfiles,tbs_type,write_file,peak_threshold):
                 else:
                     tes_dict[chro_pos_strand] += tes
 
-        if tbs_type == "tss":
+        if tps_type == "tss":
             for chro_pos_strand,count in tss_dict.items():
                 if count < peak_threshold:
                     tss_dict[chro_pos_strand] = 0
@@ -125,7 +125,7 @@ def peak_filter(all_combine_tbsfiles,tbs_type,write_file,peak_threshold):
                     if count != 0:
                         f.write("%s\t%s\n"%(chro_pos_strand,count))
 
-        if tbs_type == "tes":
+        if tps_type == "tes":
             for chro_pos_strand,count in tes_dict.items():
                 if count < peak_threshold:
                     tes_dict[chro_pos_strand] = 0
@@ -135,7 +135,7 @@ def peak_filter(all_combine_tbsfiles,tbs_type,write_file,peak_threshold):
                     if count != 0:
                         f.write("%s\t%s\n"%(chro_pos_strand,count))
 
-        if tbs_type == "tbs":
+        if tps_type == "tps":
             for chro_pos_strand,count in tss_dict.items():
                 if count < peak_threshold:
                     tss_dict[chro_pos_strand] = 0
@@ -152,18 +152,18 @@ def peak_filter(all_combine_tbsfiles,tbs_type,write_file,peak_threshold):
                         f.write("%s\t%s\t%s\n"%(chro_pos_strand,tss,tes))
 
 
-def load_tbs_objects(peak_threshold,logger,args):
+def load_tps_objects(peak_threshold,logger,args):
     logger.info("loading files...\n")
 
     tssfiles = args.tssfile
     tesfiles = args.tesfile
-    tbsfiles = args.tbsfile
+    tpsfiles = args.tpsfile
     rangefiles = args.rangefile
     bamfiles = args.bamfile
 
     tss_collections_dict = {}
     tes_collections_dict = {}
-    tbs_collections_dict = {}
+    tps_collections_dict = {}
 
     #input file type:rangefile
     # range file needs annotation file to find the transcript strand.
@@ -182,7 +182,7 @@ def load_tbs_objects(peak_threshold,logger,args):
 
         for rangefile in rangefiles:
             rangefile_basename = os.path.basename(rangefile)
-            write_tbs_filename = os.path.splitext(rangefile_basename)[0] + ".lrtsp"
+            write_tps_filename = os.path.splitext(rangefile_basename)[0] + ".lrtsp"
             logger.info("\t>>>reading %s\n" % os.path.basename(rangefile))
             if args.gtf:
                 all_ranges = misc.read_range_withoutstrand_file(rangefile)
@@ -191,7 +191,7 @@ def load_tbs_objects(peak_threshold,logger,args):
             else:
                 all_ranges = misc.read_range_withstrand_file(rangefile)
                 all_ranges_ToPeak = misc.range_to_peak(all_ranges)
-            with open(write_tbs_filename,'w') as f:
+            with open(write_tps_filename,'w') as f:
                 for chro_strand_pos,counts in all_ranges_ToPeak.items():
                     chro = chro_strand_pos.split('_')[0]
                     strand = chro_strand_pos.split('_')[1]
@@ -201,16 +201,16 @@ def load_tbs_objects(peak_threshold,logger,args):
                     elif strand == "-":
                         write_line = "%s\t%s\t%s\t%s\t%s\n" % (chro,pos,strand,counts[1],counts[0])
                     f.write(write_line)
-            tbsfiles.append(write_tbs_filename)
+            tpsfiles.append(write_tps_filename)
 
     #input file type:bamfile
     if len(bamfiles) > 0:
         logger.info("coverting bam file to lrtsp file")
         p = Pool(int(args.cpu))
-        bed_tbsfiles = p.map(loadbamfile,bamfiles)
-        bedfiles = [bed_tbsfile[0] for bed_tbsfile in bed_tbsfiles]
-        tbsfiles = [bed_tbsfile[1] for bed_tbsfile in bed_tbsfiles]
-        genestrandbedfiles = [bed_tbsfile[2] for bed_tbsfile in bed_tbsfiles]
+        bed_tpsfiles = p.map(loadbamfile,bamfiles)
+        bedfiles = [bed_tpsfile[0] for bed_tpsfile in bed_tpsfiles]
+        tpsfiles = [bed_tpsfile[1] for bed_tpsfile in bed_tpsfiles]
+        genestrandbedfiles = [bed_tpsfile[2] for bed_tpsfile in bed_tpsfiles]
         p.close()
         p.join()
 
@@ -254,38 +254,38 @@ def load_tbs_objects(peak_threshold,logger,args):
             except:
                 pass
 
-    #input file type:tbs file
-    if len(tbsfiles) > 0:
+    #input file type:tps file
+    if len(tpsfiles) > 0:
         if not args.replicate:
             '''
-            TBS file should look like this:
+            TPS file should look like this:
             chr pos strand startcount endcount
             1   14000   +   2   0
             1   15361   -   0   1
             '''
-            for tbsfilepath in tbsfiles:
-                logger.info("\t>>>reading %s\n" % os.path.basename(tbsfilepath))
-                final_tbsfile_path = noreplicate_peak_filter(tbsfilepath,peak_threshold,logger,"tbs")
-                tbs_collection = misc.load_lrtsp_objects(final_tbsfile_path, "tbs")
-                tbs_collections_dict[os.path.basename(final_tbsfile_path)] = tbs_collection
+            for tpsfilepath in tpsfiles:
+                logger.info("\t>>>reading %s\n" % os.path.basename(tpsfilepath))
+                final_tpsfile_path = noreplicate_peak_filter(tpsfilepath,peak_threshold,logger,"tps")
+                tps_collection = misc.load_lrtsp_objects(final_tpsfile_path, "tps")
+                tps_collections_dict[os.path.basename(final_tpsfile_path)] = tps_collection
         else:
-            all_combine_tbsfiles = "all_combine_tbsfiles.lrtsp"
-            unique_all_combine_tbsfiles = "unique_all_combine_tbsfiles.lrtsp"
-            tbs_collection = replicate_case_getcollection(tbsfiles, all_combine_tbsfiles, unique_all_combine_tbsfiles, logger,"tbs",peak_threshold)
-            tbs_collections_dict[unique_all_combine_tbsfiles] = tbs_collection
+            all_combine_tpsfiles = "all_combine_tpsfiles.lrtsp"
+            unique_all_combine_tpsfiles = "unique_all_combine_tpsfiles.lrtsp"
+            tps_collection = replicate_case_getcollection(tpsfiles, all_combine_tpsfiles, unique_all_combine_tpsfiles, logger,"tps",peak_threshold)
+            tps_collections_dict[unique_all_combine_tpsfiles] = tps_collection
             try:
-                os.remove(all_combine_tbsfiles)
-                os.remove(unique_all_combine_tbsfiles)
+                os.remove(all_combine_tpsfiles)
+                os.remove(unique_all_combine_tpsfiles)
             except:
                 pass
 
-    return [tss_collections_dict,tes_collections_dict,tbs_collections_dict,bedfiles,genestrandbedfiles]
+    return [tss_collections_dict,tes_collections_dict,tps_collections_dict,bedfiles,genestrandbedfiles]
 
-def replicate_case_getcollection(tbsfiles,all_combine_tbsfiles,unique_all_combine_tbsfiles,logger,tbs_type,peak_threshold):
-    combine_files(tbsfiles,all_combine_tbsfiles,logger,columns_num=2)
-    peak_filter(all_combine_tbsfiles, tbs_type, unique_all_combine_tbsfiles, peak_threshold)
-    tbs_collection = misc.load_lrtsp_objects(unique_all_combine_tbsfiles, tbs_type)
-    return tbs_collection
+def replicate_case_getcollection(tpsfiles,all_combine_tpsfiles,unique_all_combine_tpsfiles,logger,tps_type,peak_threshold):
+    combine_files(tpsfiles,all_combine_tpsfiles,logger,columns_num=2)
+    peak_filter(all_combine_tpsfiles, tps_type, unique_all_combine_tpsfiles, peak_threshold)
+    tps_collection = misc.load_lrtsp_objects(unique_all_combine_tpsfiles, tps_type)
+    return tps_collection
 
 def non_replicate_case_getcollection():
     pass
@@ -416,9 +416,9 @@ def main():
     if args.log:
         if args.log == True:
             log_index = 1
-            while os.path.exists("TBSfinder%s.log" % log_index):
+            while os.path.exists("TPSfinder%s.log" % log_index):
                 log_index += 1
-            args.log = "TBSfinder%s.log"% log_index
+            args.log = "TPSfinder%s.log"% log_index
         handler = logging.FileHandler(args.log)
         handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -427,7 +427,7 @@ def main():
 
     #load lrtsp file
     peak_threshold = params_dict["peak_threshold"]
-    ts_collections_list = load_tbs_objects(peak_threshold,logger,args)
+    ts_collections_list = load_tps_objects(peak_threshold,logger,args)
     genestrandbedfiles = ts_collections_list[-1]
     bedfiles = ts_collections_list[-2]
     ts_collections_list = ts_collections_list[:-2]

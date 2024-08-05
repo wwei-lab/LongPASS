@@ -8,7 +8,7 @@ LongPASS is an annotation-free hierarchical parametric-clustering strategy that 
 
 
 
-<img src=".\pic\abstract_graph_v10_00.png" alt="drawing" width="600"/>
+<img src=".\pic\longpasspipeline.png" alt="drawing" width="600"/>
 
 
 
@@ -24,12 +24,12 @@ pybedtools
 
 ### Usage
 
-##### 0. Prepare the Genome Alignment bam file using minimap2
+##### 0. Prepare the Genome Alignment BAM file using minimap2
 
 ###### 0.0 Mapping using minimap2
 
 ```shell
-minimap2  -t $ncpu --secondary=no -a -x splice $fastq $infile  --splice-flank=$flank | samtools sort -@ $ncpu > $outfile    
+minimap2  -t $ncpu --secondary=no -a -x splice $fastq --splice-flank=$flank | samtools sort -@ $ncpu > $outfile    
 ```
 
 
@@ -40,7 +40,7 @@ minimap2  -t $ncpu --secondary=no -a -x splice $fastq $infile  --splice-flank=$f
 python filter_reads_for_clustering.py ${in.bam} ${out.bam}
 ```
 
-(Optional: We also recommend using the Fulquant pipeline we developed previously for adapter removal, mapping, and read alignment filtering：[Fulquant](https://github.com/czhu/FulQuant) steps 1->6)
+(Optional: We also recommend using the FulQuant pipeline we developed previously for adapter removal, mapping, and read alignment filtering：[FulQuant](https://github.com/czhu/FulQuant) steps 1->6)
 
 (Optional: We also include a polyA/T trimming pipeline [here](misc/trimpolyA.py))
 
@@ -52,21 +52,21 @@ python trimpolyA.py in.fasta out.fasta
 
 
 
-##### 1. Generate TBS file(transcript boundary file) from bam
+##### 1. Generate TPS(TSS/PAS file) file from BAM
 
 ```shell
-python misc/bamtotbs.py [in.bam] [out.tbs]
+python misc/bamtotps.py [in.bam] [out.tps]
 ```
 
-in.bam: input bam file
+in.bam: input BAM file
 
-out.tbs: output tbs file
+out.tps: output TPS file
 
-###### tbsfile:
+###### TPS file:
 
-The Tbs file is a custom file type that records the coordinates and counts of read boundary (TSS/PAS) sites.
+The TPS file records the coordinates and counts of TSS/PAS sites from the reads.
 
-The tbsfile contains 7 columns of information:
+The TPS file contains 7 columns of information:
 
 - Chromosome
 - Genomic coordinates(1-base)
@@ -78,17 +78,26 @@ The tbsfile contains 7 columns of information:
 
 
 
+Example of a TPS file:
+```
+1       14363   -       0       13      ,       ONT_BMK211213-AS036-01O0005_clean:P:-:140:21540a7e-b3cb-4f37-bbc8-643210b7ab9c:P-T-P:127:2110:1984:2180:Q11.69,ONT_BMK211213-AS036-01O0007_clean:P:-:85:c9b15af0-6b0c-4512-9995-5473d5c5d4ff:P-T-P:108:1864:1757:1933:Q13.71,ONT_BMK211213-AS036-01O0007_clean:P:-:181:204a3fc0-18fb-45f8-8e33-60d19f337fba:P-T-P:138:1635:1498:1707:Q10.92,ONT_BMK211213-AS036-01O0007_clean:P:-:152:9c82af8b-2ac7-47d2-8638-acf705c27c4b:P-T-P:136:1677:1542:1726:Q10.86,ONT_BMK211213-AS036-01O0007_clean:P:-:128:ac00e1a0-f1fa-4306-9e8f-ea2705a45414:P-T-P:133:1848:1716:1897:Q12.58,ONT_BMK211213-AS036-01O0008_clean:P:-:22:1a613155-7d21-4c38-a472-f93fffb1c8de:P-T-P:149:827:679:877:Q12.46,ONT_BMK211213-AS036-01O0005_clean:P:+:47:6dd4d7c4-2ff9-476a-8f53-f165af59f77d:P-A-P:85:712:628:779:Q11.92,ONT_BMK211213-AS036-01O0006_clean:P:+:83:d5fb033e-459a-42b1-90cb-7a1b5d1263f8:P-A-P:86:1433:1348:1564:Q13.26,ONT_BMK211213-AS036-01O0007_clean:P:+:196:9247e219-7bd4-4b27-8510-af856f20a152:P-A-P:79:1476:1398:1588:Q8.86,ONT_BMK211213-AS036-01O0009_clean:P:+:103:bb4cee07-b8d7-4085-946d-57fa63dfe26a:P-A-P:84:3204:3121:3329:Q14.25,ONT_BMK211213-AS036-01O0009_clean:P:+:130:11e419e6-fdeb-494c-8e8b-6274f771c228:P-A-P:92:927:836:1010:Q9.57,ONT_BMK220926-BB670-02O0002_clean.fq.gz:P:+:91:c07ca0c1-ad57-4247-96cc-424a450b2dc2:P-A-P:83:1523:1441:1629:Q12.85,ONT_BMK211213-AS036-01O0002_clean:P:+:216:32b0d5a7-81ed-49f2-b355-d032d89d134e:P-A-P:89:1377:1289:1436:Q8.54,
+1       24877   -       1       0       ONT_BMK211213-AS036-01O0005_clean:P:-:140:21540a7e-b3cb-4f37-bbc8-643210b7ab9c:P-T-P:127:2110:1984:2180:Q11.69, ,
+1       29347   -       8       0       ONT_BMK211213-AS036-01O0007_clean:P:-:152:9c82af8b-2ac7-47d2-8638-acf705c27c4b:P-T-P:136:1677:1542:1726:Q10.86,ONT_BMK211213-AS036-01O0007_clean:P:+:175:e78c3cc1-c467-43cc-bcce-b89748fa1b32:P-A-P:81:1617:1537:1737:Q10.64,ONT_BMK211213-AS036-01O0008_clean:P:-:97:4360e005-0bee-4e7a-8312-a1b16d8a5288:P-T-P:110:995:886:1067:Q10.48,ONT_BMK211213-AS036-01O0001_clean:P:+:317:7609282f-ae06-4613-8635-2dfbb6dd27f5:P-A-P:76:2710:2635:2814:Q9.85,ONT_BMK211213-AS036-01O0007_clean:P:+:101:108c45ea-d2ad-4992-a3d4-c6290e3740b4:P-A-P:83:1787:1705:1908:Q12.54,ONT_BMK211213-AS036-01O0007_clean:P:-:70:cfc6f093-ca3c-42a8-bac1-1ec6179f051d:P-T-P:105:1214:1110:1287:Q12.41,ONT_BMK211213-AS036-01O0007_clean:P:-:65:165a7bc0-d52d-45f1-a753-30e95f8ca184:P-T-P:121:966:846:1039:Q12.11,ONT_BMK211213-AS036-01O0001_clean:P:-:63:bfbd3f68-7982-419e-966f-43eaf6d13c5a:P-N-P:86:2022:1937:2092:Q15.01,     ,
+```
+
+
+
 ##### 2. Run longPASS
 
 ```shell
-python longPass/LongPass.py --params [param.txt] --clustering [paraclu,distclu] --tbsfile [tbsfile]  -o [outfile] --normalization [simplecpm,raw]
+python longPass/LongPass.py --params [param.txt] --clustering [paraclu,distclu] --tpsfile [TPS file]  -o [outfile] --normalization [simplecpm,raw]
 ```
 
---params: Parameter file, specifying parameters for clustering, see example at: 
+--params: Parameter file, specifying parameters for clustering, see example at [here](.\param\params.txt)
 
 --clustering: Clustering algorithm, options: paraclu, distclu.
 
---tbsfile: Transcript boundary file generated from step1.
+--tpsfile: Transcript boundary file generated from step1.
 
 --outfile: Path for output file.
 
@@ -126,17 +135,23 @@ maxdist: Two sites will be merged if their distance is less than or equal to thi
 
 **paraclu:**
 
-minStability: Minimum stability (defined as the ratio of the maximum distance to the minimum distance within a segment).
+minStability: Minimum stability for a segment. default: 1
 
-maxLength: Retain segments shorter than this length.
+The stability ratio of each cluster is defined as the ratio:
 
-removeSingletons: Whether to remove segments of single-base length.(True/False)
+![img](.\pic\stability.png)
 
-keepSingletonAbove: If `removeSingletons` is set to `True`, single-base segments below this threshold will be filtered out.
+   A high cluster stability ratio indicates that the cluster remains significant over a wide range of **d** values, implying it is a stable and robust cluster. A small stability score indicates that the break in this layer does not effectively separate the two segments.
 
-reducetoNoneoverlap: Whether to merge overlapping segments.
+   
 
-peakThreshold: Sites with a count below this value will be filtered out.
+maxLength: The maximum length of retained clusters, clusters longer than this length should be further split. default: 150
+
+removeSingletons: Whether to remove single-bp clusters (True/False). defualt: True
+
+keepSingletonAbove: If removeSingletons is set to True, single-bp clusters with count below this threshold will be filtered out, default: 0.1.
+
+peakThreshold: Sites with a count below this value will be filtered out. default=3.
 
 
 
@@ -163,12 +178,6 @@ peakThreshold: Sites with a count below this value will be filtered out.
 
 [^1]: Balwierz, P.J., Carninci, P., Daub, C.O. *et al.* Methods for analyzing deep sequencing expression data: constructing the human and mouse promoterome with deepCAGE data. *Genome Biol* **10**, R79 (2009). https://doi.org/10.1186/gb-2009-10-7-r79
 [^2]: Frith MC, Valen E, Krogh A, Hayashizaki Y, Carninci P, Sandelin A. A code for transcription initiation in mammalian genomes. Genome Res. 2008 Jan;18(1):1-12. doi: 10.1101/gr.6831208. Epub 2007 Nov 21. PMID: 18032727; PMCID: PMC2134772.
-
-
-
-### Citation
-
-Song, X., Yan, H., Hong, Y., Huang, J., et al. (2024). Co-regulation of alternative splicing with transcription initiation and termination revealed by long-read RNA sequencing.
 
 
 

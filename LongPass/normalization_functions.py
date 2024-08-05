@@ -7,7 +7,7 @@ def simpleTpm(site_counts,total_count):
     '''
     params:
     site_count:count of a site.
-    total_count:total number of site count of different TBS object.
+    total_count:total number of site count of different TPS object.
     return:
     the normalized result of the site count:cpm.
     '''
@@ -20,7 +20,7 @@ def simpleTpm(site_counts,total_count):
 def fit_power_law_to_values(sites_counts,value_range = [10,1000]):
     '''
     param:
-    sites_counts:list of dirrerent TBS obejct's site count.
+    sites_counts:list of dirrerent TPS obejct's site count.
     value_range:two number,one for the start of the range,one for the end of the range.This range is used to remove tags counts 
     that are out of the range of the input.
     return:
@@ -50,7 +50,7 @@ def fit_power_law_to_values(sites_counts,value_range = [10,1000]):
 def fit_values_to_referent_power_law(sites_counts,coefficients,alpha = 1.25,T = 10**6):
     '''
     param:
-    sites_counts:list of dirrerent TBS obejct's site count.
+    sites_counts:list of dirrerent TPS obejct's site count.
     coefficients:output of function fit_power_law_to_values.
     slope of the referent power-law distribution.
     total number of sites_counts in the referent power-law distribution.

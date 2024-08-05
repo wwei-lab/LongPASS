@@ -1,4 +1,4 @@
-#class of transcription boundaries sites(TSS OR TES)(TBS)
+#class of transcription boundaries sites(TSS OR TES)(TPS)
 import normalization_functions
 from cluster_functions import paraclu,distclu
 import multiprocessing
@@ -8,20 +8,20 @@ import operator
 from time import *
 from functools import partial
 
-class TBS_all_collection(object):
+class TPS_all_collection(object):
     '''
     class of transcription boundary sites collection.
     '''
-    def __init__(self,TBS_all_list,TBS_strand_collection_list):
-        self.TBS_strand_collection_list = TBS_strand_collection_list
-        self.TBSlist = TBS_all_list
-        self.reads_counts = [int(tbs.reads_count) for tbs in self.TBSlist]
+    def __init__(self,TPS_all_list,TPS_strand_collection_list):
+        self.TPS_strand_collection_list = TPS_strand_collection_list
+        self.TPSlist = TPS_all_list
+        self.reads_counts = [int(tps.reads_count) for tps in self.TPSlist]
         self.total_count = sum(self.reads_counts)
-        # self.chrs = [TBS.chr for TBS in self.TBSlist]
-        # self.pos = [TBS.pos for TBS in self.TBSlist]
-        # self.strands = [TBS.strand for TBS in self.TBSlist]
+        # self.chrs = [TPS.chr for TPS in self.TPSlist]
+        # self.pos = [TPS.pos for TPS in self.TPSlist]
+        # self.strands = [TPS.strand for TPS in self.TPSlist]
 
-    def TBS_filter(self,num):
+    def TPS_filter(self,num):
         pass
 
     def normalization(self,method):
@@ -35,38 +35,38 @@ class TBS_all_collection(object):
             self.normalized_counts = self.reads_counts
         
         g = 0
-        for i,tbs_strand_collection in enumerate(self.TBS_strand_collection_list):
-            for j,tbs_chr_collection in enumerate(tbs_strand_collection.tbs_chr_collection_list):
-                for k,tbs in enumerate(tbs_chr_collection.tbs_chr_list):
-                    self.TBS_strand_collection_list[i].tbs_chr_collection_list[j].tbs_chr_list[k].normalized_count = self.normalized_counts[g]
+        for i,tps_strand_collection in enumerate(self.TPS_strand_collection_list):
+            for j,tps_chr_collection in enumerate(tps_strand_collection.tps_chr_collection_list):
+                for k,tps in enumerate(tps_chr_collection.tps_chr_list):
+                    self.TPS_strand_collection_list[i].tps_chr_collection_list[j].tps_chr_list[k].normalized_count = self.normalized_counts[g]
                     g += 1
 
 
     def clustering(self,cpu,params_dict,method = "paraclu"):
-        all_tbs_chr_list = []
-        for i,tbs_strand_collection in enumerate(self.TBS_strand_collection_list):
-            strand = tbs_strand_collection.strand
-            for j,tbs_chr_collection in enumerate(tbs_strand_collection.tbs_chr_collection_list):
-                chro = tbs_chr_collection.chro
+        all_tps_chr_list = []
+        for i,tps_strand_collection in enumerate(self.TPS_strand_collection_list):
+            strand = tps_strand_collection.strand
+            for j,tps_chr_collection in enumerate(tps_strand_collection.tps_chr_collection_list):
+                chro = tps_chr_collection.chro
                 cluster_list = []
-                tss_pos_list = [int(tbs.pos) for tbs in tbs_chr_collection.tbs_chr_list if tbs.eventtype == "tss"]
-                tes_pos_list = [int(tbs.pos) for tbs in tbs_chr_collection.tbs_chr_list if tbs.eventtype == "tes"]
-                tss_cpm_list = [float(tbs.normalized_count) for tbs in tbs_chr_collection.tbs_chr_list if tbs.eventtype == "tss"]
-                tes_cpm_list = [float(tbs.normalized_count) for tbs in tbs_chr_collection.tbs_chr_list if tbs.eventtype == "tes"]
+                tss_pos_list = [int(tps.pos) for tps in tps_chr_collection.tps_chr_list if tps.eventtype == "tss"]
+                tes_pos_list = [int(tps.pos) for tps in tps_chr_collection.tps_chr_list if tps.eventtype == "tes"]
+                tss_cpm_list = [float(tps.normalized_count) for tps in tps_chr_collection.tps_chr_list if tps.eventtype == "tss"]
+                tes_cpm_list = [float(tps.normalized_count) for tps in tps_chr_collection.tps_chr_list if tps.eventtype == "tes"]
                 if tss_cpm_list != [] and tss_pos_list != []:
-                    all_tbs_chr_list.append([strand,chro,tss_pos_list,tss_cpm_list,cluster_list,"tss"]) # three dimensional list
+                    all_tps_chr_list.append([strand,chro,tss_pos_list,tss_cpm_list,cluster_list,"tss"]) # three dimensional list
                 if tes_cpm_list != [] and tes_pos_list != []:
-                    all_tbs_chr_list.append([strand,chro,tes_pos_list,tes_cpm_list,cluster_list,"tes"])
+                    all_tps_chr_list.append([strand,chro,tes_pos_list,tes_cpm_list,cluster_list,"tes"])
 
         if method == "paraclu":
             p = multiprocessing.Pool(int(cpu))
-            all_cluster_list = p.map(paraclu,all_tbs_chr_list)
+            all_cluster_list = p.map(paraclu,all_tps_chr_list)
             p.close()
             p.join()
         else:
             p = multiprocessing.Pool(int(cpu))
             maxdist = params_dict.get("maxdist")
-            all_cluster_list = p.map(partial(distclu,max_dist = maxdist),all_tbs_chr_list)
+            all_cluster_list = p.map(partial(distclu,max_dist = maxdist),all_tps_chr_list)
             p.close()
             p.join()
 
@@ -204,24 +204,24 @@ def cluster_filter2_step3(cluster_filter2_tmp_selected_list_cluster_filter1_list
 
     return cluster_filter2_list
 
-class TBS_strand_collection(object):
+class TPS_strand_collection(object):
     '''
     class of transcription boundary sites for a specific strand collection.
     '''
-    def __init__(self,strand,TBS_chr_collection_list):
+    def __init__(self,strand,TPS_chr_collection_list):
         self.strand = strand
-        self.tbs_chr_collection_list = TBS_chr_collection_list
+        self.tps_chr_collection_list = TPS_chr_collection_list
 
-class TBS_chr_collection(object):
+class TPS_chr_collection(object):
     '''
     class of transcription boundary sites for a specific chromosome collection.
     '''
-    def __init__(self,chro,TBS_chr_list):
+    def __init__(self,chro,TPS_chr_list):
         self.chro = chro
-        self.tbs_chr_list = TBS_chr_list  #Elements of this list are TBS object.
+        self.tps_chr_list = TPS_chr_list  #Elements of this list are TPS object.
         
 
-class TBS(object):
+class TPS(object):
     '''
     class of transcription boundary sites
     '''
@@ -244,19 +244,19 @@ class RBS(object):
         self.reads_count = reads_count #should be integer.
         self.type = boundary_type  #should be start or end.
 
-    def convert2TBS(self,):
+    def convert2TPS(self,):
         if (self.strand == "+"):
             if (self.type.lower() == "start"):
-                return TBS(self.chr,self.pos,self.strand,self.reads_count,"TSS")
+                return TPS(self.chr,self.pos,self.strand,self.reads_count,"TSS")
             elif (self.type.lower() == "end"):
-                return TBS(self.chr,self.pos,self.strand,self.reads_count,"TES")
+                return TPS(self.chr,self.pos,self.strand,self.reads_count,"TES")
             else:
                 raise Exception("sorry!Non standard input for the boundary column.")
         elif (self.strand == "-"):
             if (self.type.lower() == "start"):
-                return TBS(self.chr,self.pos,self.strand,self.reads_count,"TES")
+                return TPS(self.chr,self.pos,self.strand,self.reads_count,"TES")
             elif (self.type.lower() == "end"):
-                return TBS(self.chr,self.pos,self.strand,self.reads_count,"TSS")
+                return TPS(self.chr,self.pos,self.strand,self.reads_count,"TSS")
             else:
                 raise Exception("sorry!Non standard input for the boundary column.")
         else:
