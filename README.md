@@ -93,7 +93,7 @@ Example of a TPS file:
 python longPass/LongPass.py --params [param.txt] --clustering [paraclu,distclu] --tpsfile [TPS file]  -o [outfile] --normalization [simplecpm,raw]
 ```
 
---params: Parameter file, specifying parameters for clustering, see example at [here](.\param\params.txt)
+--params: Parameter file, specifying parameters for clustering, see example at [here](./param/params.txt)
 
 --clustering: Clustering algorithm, options: paraclu, distclu.
 
