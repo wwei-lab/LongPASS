@@ -38,8 +38,6 @@ git clone https://github.com/wwei-lab/LongPASS.git
 minimap2  -t $ncpu --secondary=no -a -x splice $fastq --splice-flank=$flank | samtools sort -@ $ncpu > $outfile    
 ```
 
-
-
 ###### 0.1 Filter out supplementary alignments
 
 ```shell
@@ -177,6 +175,16 @@ peakThreshold: Sites with a count below this value will be filtered out. default
 | Minimum density of the cluster                    |
 | Cluster type (TSS/PAS)                            |
 | Read IDs associated with this cluster             |
+
+#### Demo data
+demo bam and demo output can be downloaded from:https://pan.baidu.com/s/1IgHZM72Vcxi8VFAHnqqnww, password: d196
+
+and run as follow:
+```
+python LongPass/bamtotbs.py simulated2_aligned_reads.sorted.bam
+python LongPass/LongPass.py --params params2.txt --clustering paraclu --tbsfile simulated2_aligned_reads.sorted.tbs -o simulated2_aligned_reads.sorted.param2.outcluster.txt --outdir ${outdir} --normalization simplecpm
+```
+
 
 
 
