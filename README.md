@@ -184,7 +184,7 @@ and run as follow:
 python LongPass/bamtotbs.py simulated2_aligned_reads.sorted.bam
 python LongPass/LongPass.py --params params2.txt --clustering paraclu --tbsfile simulated2_aligned_reads.sorted.tbs -o simulated2_aligned_reads.sorted.param2.outcluster.txt --outdir ${outdir} --normalization simplecpm
 ```
-
+The 1.8 GB BAM demo data is expected to finish within half an hour using a single CPU core.
 
 
 
