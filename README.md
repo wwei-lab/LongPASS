@@ -15,7 +15,7 @@ LongPASS is an annotation-free hierarchical parametric-clustering strategy that 
 ## Requirement
 
 ```
-minimap2
+minimap2(2.24-r1122)
 pysam
 pybedtools
 ```
@@ -23,6 +23,12 @@ pybedtools
 
 
 ### Usage
+
+##### installation
+This software was tested on CentOS Linux 7(Core)
+```shell
+git clone https://github.com/wwei-lab/LongPASS.git
+```
 
 ##### 0. Prepare the Genome Alignment BAM file using minimap2
 
